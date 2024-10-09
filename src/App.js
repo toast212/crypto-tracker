@@ -5,6 +5,7 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import './App.css'; // Import the CSS
 import NewsTicker from './components/News'; // Import the News components
+import Sentiment from 'sentiment'; // Import Sentiment.js
 
 function CoinDetails({ coin, history }) {
   // Prepare the data for the line chart
@@ -54,6 +55,12 @@ function App() {
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042']; // add more colors if you have more coins
 
+  // Initialize Sentiment
+  const sentiment = useMemo(() => new Sentiment(), []);
+
+  // State to hold sentiment analysis result
+  const [sentimentResult, setSentimentResult] = useState(null);
+
   useEffect(() => {
     axios.get(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${holdings.map(holding => holding.id).join(',')}`, {
       headers: {
@@ -77,19 +84,38 @@ function App() {
       .catch(error => {
         console.error('Error fetching data', error);
       });
-  }, [holdings]);
+
+    // Perform Sentiment Analysis on the test sentence
+    const testSentence = "Bitcoin is experiencing a bullish trend with increasing investor interest.";
+    const analysis = sentiment.analyze(testSentence);
+
+    // Determine sentiment label based on the score
+    let sentimentLabel = 'Neutral';
+    if (analysis.score > 2) {
+      sentimentLabel = 'Positive';
+    } else if (analysis.score < -2) {
+      sentimentLabel = 'Negative';
+    }
+
+    setSentimentResult({
+      text: testSentence,
+      score: analysis.score,
+      label: sentimentLabel
+    });
+
+  }, [holdings, sentiment, api_key]);
 
   const handleCoinSelect = (id) => {
     setLoading(true);
     const selected = coins.find(coin => coin.id === id);
     setSelectedCoin(selected);
-  
+
     // Fetch historical data for the selected date range
     const promises = [];
     const date = new Date(startDate);
     while (date <= endDate) {
       const formattedDate = `${date.getDate()}-${date.getMonth() + 1}-${date.getFullYear()}`;
-  
+
       const promise = axios.get(`http://localhost:3001/api/v3/coins/${id}/history?date=${formattedDate}`, {
         headers: {
           'X-CoinAPI-Key': api_key
@@ -103,11 +129,11 @@ function App() {
           console.error('Error fetching historical data', error);
           return [Date.parse(formattedDate), 0]; // Return a default value
         });
-  
+
       promises.push(promise);
       date.setDate(date.getDate() + 1); // Increment the date
     }
-  
+
     Promise.all(promises)
       .then(history => {
         setHistory(history);
@@ -131,8 +157,9 @@ function App() {
         {loading ? (
           <p>Loading...</p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100vh' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
             <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', width: '100%', height: '100%' }}>
+              {/* Portfolio Tracker Section */}
               <div style={{ flex: 1, border: '1px solid black', margin: '10px', padding: '20px', borderRadius: '10px', boxSizing: 'border-box' }}>
                 <h2>Portfolio Tracker</h2>
                 <ResponsiveContainer width="100%" height={400}>
@@ -180,6 +207,8 @@ function App() {
                 <h3>ROI: {roi.toFixed(2)}%</h3>
                 <h3>P&L: ${pnl.toFixed(2)}</h3>
               </div>
+
+              {/* Trends Section */}
               <div style={{ flex: 1, border: '1px solid black', margin: '10px', padding: '20px', borderRadius: '10px', boxSizing: 'border-box' }}>
                 <h2>Trends</h2>
                 <select value={selectedCoin ? selectedCoin.id : ''} onChange={e => handleCoinSelect(e.target.value)}>
@@ -187,10 +216,37 @@ function App() {
                     <option key={coin.id} value={coin.id}>{coin.name} ({coin.symbol.toUpperCase()})</option>
                   ))}
                 </select>
-                <DatePicker selected={startDate} onChange={date => setStartDate(date)} />
-                <DatePicker selected={endDate} onChange={date => setEndDate(date)} />
+                <div style={{ margin: '10px 0' }}>
+                  <label>Start Date: </label>
+                  <DatePicker selected={startDate} onChange={date => setStartDate(date)} />
+                </div>
+                <div style={{ margin: '10px 0' }}>
+                  <label>End Date: </label>
+                  <DatePicker selected={endDate} onChange={date => setEndDate(date)} />
+                </div>
                 {selectedCoin && <CoinDetails coin={selectedCoin} history={history} />}
               </div>
+            </div>
+
+            {/* Sentiment Analysis Section */}
+            <div style={{ marginTop: '20px', padding: '20px', border: '1px solid #ccc', borderRadius: '10px', width: '80%', backgroundColor: '#f9f9f9' }}>
+              <h2>Sentiment Analysis</h2>
+              {sentimentResult ? (
+                <div>
+                  <p><strong>Text:</strong> {sentimentResult.text}</p>
+                  <p><strong>Score:</strong> {sentimentResult.score}</p>
+                  <p><strong>Sentiment:</strong>
+                    <span style={{
+                      color: sentimentResult.label === 'Positive' ? 'green' : sentimentResult.label === 'Negative' ? 'red' : 'gray',
+                      fontWeight: 'bold'
+                    }}>
+                      {` ${sentimentResult.label}`}
+                    </span>
+                  </p>
+                </div>
+              ) : (
+                <p>Analyzing sentiment...</p>
+              )}
             </div>
           </div>
         )}
@@ -200,3 +256,5 @@ function App() {
 }
 
 export default App;
+
+
